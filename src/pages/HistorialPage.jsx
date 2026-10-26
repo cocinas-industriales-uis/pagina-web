@@ -1,102 +1,59 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import Encabezado from '../components/Encabezado';
 import HistorialLecturas from '../components/HistorialLecturas';
-import { obtenerLecturas, obtenerUltimaLectura } from '../services/api';
+import { lecturas as apiLecturas } from '../services/api';
+import { useEnVivo } from '../services/contextos';
+import { nombreCocina } from '../utils/estado';
 import '../styles/Dashboard.css';
 import '../styles/HistorialPage.css';
+import '../styles/Nuevo.css';
+
+const POR_PAGINA = 25;
 
 export default function HistorialPage() {
-  const [lecturas, setLecturas] = useState([]);
-  const [lectura, setLectura] = useState(null);
-  const [cargando, setCargando] = useState(true);
+  const { cocinas } = useEnVivo();
+  const [cocina, setCocina] = useState('');           // '' = todas
+  const [pagina, setPagina] = useState(0);
+  const [datos, setDatos] = useState({ count: 0, results: [] });
   const [error, setError] = useState(null);
+  const [cargando, setCargando] = useState(true);
 
-  const cargarDatos = async () => {
+  const cargar = useCallback(async () => {
     try {
-      const [lecturasData, ultimaLecturaData] = await Promise.all([
-        obtenerLecturas(100),
-        obtenerUltimaLectura(),
-      ]);
-      const lecturasList = Array.isArray(lecturasData) ? lecturasData : lecturasData.results || [];
-      setLecturas(lecturasList);
-      setLectura(ultimaLecturaData);
-      setError(null);
-    } catch (err) {
-      console.error('Error al cargar datos:', err);
-      setError('No se puede conectar al servidor');
-      setLecturas([]);
-      setLectura(null);
+      const r = await apiLecturas({ cocina_id: cocina || undefined, limit: POR_PAGINA, offset: pagina * POR_PAGINA });
+      setDatos(r); setError(null);
+    } catch (e) {
+      setError(e.response ? `El servidor respondió ${e.response.status}` : 'No se puede conectar al servidor');
     }
     setCargando(false);
-  };
+  }, [cocina, pagina]);
 
-  useEffect(() => {
-    cargarDatos();
-    const intervalo = setInterval(cargarDatos, 10000);
-    return () => clearInterval(intervalo);
-  }, []);
+  useEffect(() => { cargar(); }, [cargar]);
 
-  const estado = lectura?.estado_sistema || 'SIN DATOS';
-  const fecha = lectura?.timestamp
-    ? new Date(lectura.timestamp).toLocaleString('es-CO')
-    : '--';
-
+  const totalPaginas = Math.max(1, Math.ceil(datos.count / POR_PAGINA));
   return (
     <main className="terminal-layout">
-      <header className="terminal-topbar">
-        <div>
-          <h1>Historial de Lecturas</h1>
-          <span className={`topbar-status ${estado.toLowerCase().replaceAll('_', '-')}`}>
-            ● {error ? 'API DESCONECTADA' : estado.replaceAll('_', ' ')}
-          </span>
-        </div>
-        <div className="topbar-actions">
-          <span className="system-pill">Sistema Normal</span>
-          <button className="emergency-btn">Emergencia</button>
-        </div>
-      </header>
-
-      <section className="operation-banner">
-        <div>
-          <h2>● Estado operativo: {estado.replaceAll('_', ' ')}</h2>
-          <p>{error ? error : 'Todos los parámetros se encuentran dentro de los rangos configurados.'}</p>
-        </div>
-        <div className="last-reading">
-          <span>Última lectura</span>
-          <strong>{fecha}</strong>
-        </div>
-      </section>
-
-      {cargando ? (
-        <div className="loading-panel">Conectando con servidor...</div>
-      ) : (
-        <div className="terminal-content">
-          <div className="historial-stats">
-            <div className="stat-card">
-              <span className="stat-label">Total de Lecturas</span>
-              <span className="stat-value">{lecturas.length}</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-label">Temperatura Promedio</span>
-              <span className="stat-value">
-                {lecturas.length > 0
-                  ? (lecturas.reduce((acc, l) => acc + parseFloat(l.temperatura), 0) / lecturas.length).toFixed(1)
-                  : '0'}
-                °C
-              </span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-label">Gas Promedio</span>
-              <span className="stat-value">
-                {lecturas.length > 0
-                  ? Math.round(lecturas.reduce((acc, l) => acc + l.nivel_gas, 0) / lecturas.length)
-                  : '0'}
-                 ppm
-              </span>
-            </div>
+      <Encabezado titulo="Historial de lecturas" />
+      <div className="terminal-content">
+        <div className="historial-stats">
+          <div className="stat-card"><span className="stat-label">Lecturas (con este filtro)</span><span className="stat-value">{datos.count}</span></div>
+          <div className="stat-card">
+            <span className="stat-label">Cocina</span>
+            <select className="selector-cocina" value={cocina} onChange={(e) => { setCocina(e.target.value); setPagina(0); }} aria-label="Filtrar por cocina">
+              <option value="">Todas</option>
+              {cocinas.map((c) => <option key={c} value={c}>{nombreCocina(c)}</option>)}
+            </select>
           </div>
-          <HistorialLecturas lecturas={lecturas} />
+          <div className="stat-card"><span className="stat-label">Página</span><span className="stat-value">{pagina + 1} / {totalPaginas}</span></div>
         </div>
-      )}
+        {error && <p className="error-form" role="alert">{error}</p>}
+        {cargando ? <div className="loading-panel">Cargando…</div> : <HistorialLecturas lecturas={datos.results} />}
+        <div className="paginacion">
+          <button className="btn-pagina" onClick={() => setPagina((p) => Math.max(0, p - 1))} disabled={pagina === 0}>← Más recientes</button>
+          <button className="btn-pagina" onClick={cargar}>Actualizar</button>
+          <button className="btn-pagina" onClick={() => setPagina((p) => p + 1)} disabled={pagina + 1 >= totalPaginas}>Más antiguas →</button>
+        </div>
+      </div>
     </main>
   );
 }

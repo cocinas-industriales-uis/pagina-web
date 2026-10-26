@@ -1,134 +1,36 @@
 import axios from 'axios';
+import { API_URL } from '../config';
 
-// Configurar la URL base del API
-const API_BASE_URL = 'http://localhost:8000/api';
+const api = axios.create({ baseURL: API_URL, timeout: 15000, headers: { 'Content-Type': 'application/json' } });
 
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-    'Cache-Control': 'no-cache, no-store, must-revalidate',
-    'Pragma': 'no-cache',
-    'Expires': '0',
-  },
-});
+// El token vive en AuthProvider; aquí solo se guarda una referencia para las cabeceras.
+let token = null;
+let alExpirar = () => {};
+export const fijarToken = (t) => { token = t; };
+export const alSesionExpirada = (fn) => { alExpirar = fn; };
 
-// Interceptor para agregar timestamp a las peticiones GET y prevenir caché
 api.interceptors.request.use((config) => {
-  if (config.method === 'get') {
-    // Agregar timestamp para evitar caché del navegador
-    config.params = config.params || {};
-    config.params._t = new Date().getTime();
-  }
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-/**
- * Obtiene la última lectura registrada
- * @returns {Promise} Última lectura del sistema
- */
-export const obtenerUltimaLectura = async () => {
-  try {
-    const response = await api.get('/lecturas/ultima/');
-    return response.data;
-  } catch (error) {
-    console.error('Error al obtener última lectura:', error);
-    throw error;
-  }
-};
+api.interceptors.response.use(
+  (r) => r,
+  (error) => {
+    // 401 con sesión abierta = token vencido o inválido. El login fallido (401) no cierra nada.
+    if (error.response?.status === 401 && token && !String(error.config?.url).includes('auth/login')) alExpirar();
+    return Promise.reject(error);
+  },
+);
 
-/**
- * Obtiene todas las lecturas (historial)
- * @param {number} limit - Límite de resultados
- * @returns {Promise} Array de lecturas
- */
-export const obtenerLecturas = async (limit = 100) => {
-  try {
-    const response = await api.get('/lecturas/', {
-      params: { limit },
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error al obtener lecturas:', error);
-    throw error;
-  }
-};
-
-/**
- * Obtiene solo las alertas (lecturas con estado != NORMAL)
- * @returns {Promise} Array de alertas
- */
-export const obtenerAlertas = async () => {
-  try {
-    const response = await api.get('/lecturas/alertas/');
-    return response.data;
-  } catch (error) {
-    console.error('Error al obtener alertas:', error);
-    throw error;
-  }
-};
-
-/**
- * Obtiene un resumen del estado actual del sistema
- * @returns {Promise} Resumen con estado actual, datos de sensores y estadísticas
- */
-export const obtenerResumen = async () => {
-  try {
-    const response = await api.get('/lecturas/resumen/');
-    return response.data;
-  } catch (error) {
-    console.error('Error al obtener resumen:', error);
-    throw error;
-  }
-};
-
-/**
- * Crea una nueva lectura (utilizado por el ESP32)
- * @param {Object} datos - Objeto con los datos de la lectura
- * @returns {Promise} Lectura creada
- */
-export const crearLectura = async (datos) => {
-  try {
-    const response = await api.post('/lecturas/', datos);
-    return response.data;
-  } catch (error) {
-    console.error('Error al crear lectura:', error);
-    throw error;
-  }
-};
-
-/**
- * Obtiene alertas con filtro opcional por tipo
- * @param {string} tipo - Tipo de alerta a filtrar (opcional)
- * @returns {Promise} Array de alertas filtradas
- */
-export const obtenerAlertusPorTipo = async (tipo) => {
-  try {
-    const response = await api.get('/lecturas/alertas/', {
-      params: { tipo },
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error al obtener alertas por tipo:', error);
-    throw error;
-  }
-};
-
-/**
- * Obtiene las lecturas filtradas por estado del sistema
- * @param {string} estado - Estado a filtrar (NORMAL, GAS_DETECTADO, etc.)
- * @returns {Promise} Array de lecturas filtradas
- */
-export const obtenerLecturasPorEstado = async (estado) => {
-  try {
-    const response = await api.get('/lecturas/', {
-      params: { estado },
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error al obtener lecturas por estado:', error);
-    throw error;
-  }
-};
+export const login = (username, password) => api.post('/auth/login/', { username, password }).then((r) => r.data);
+export const ultimasLecturas = () => api.get('/lecturas/ultimas/').then((r) => r.data);
+/** Lecturas más recientes primero. Devuelve {count, results}. */
+export const lecturas = ({ cocina_id, limit = 100, offset = 0, prioridad } = {}) =>
+  api.get('/lecturas/', { params: { cocina_id, limit, offset, prioridad } }).then((r) => r.data);
+export const alarmas = ({ estado, cocina_id, limit = 200 } = {}) =>
+  api.get('/alarmas/', { params: { estado, cocina_id, limit } }).then((r) => r.data);
+export const reconocerAlarma = (id, codigo) => api.post(`/alarmas/${id}/reconocer/`, { codigo }).then((r) => r.data);
+export const urlStream = () => `${API_URL}/stream/`;
 
 export default api;

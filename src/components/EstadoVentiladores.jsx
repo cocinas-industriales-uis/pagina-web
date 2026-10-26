@@ -1,58 +1,42 @@
 import React from 'react';
 import '../styles/EstadoVentiladores.css';
 
-const EstadoVentiladores = ({ lectura, error }) => {
-  if (error) {
-    return (
-      <div className="estado-ventiladores error-state">
-        <h3>ESTADO DE VENTILADORES</h3>
-        <p style={{ color: '#ff6b6b', fontSize: '16px', marginTop: '20px', fontWeight: 'bold' }}>🔌 API Desconectada</p>
-        <p style={{ color: '#ff6b6b', fontSize: '14px' }}>No se puede conectar al servidor</p>
-      </div>
-    );
-  }
+// v1/v2/v3 según el firmware: inyección, extracción y emergencia (% de velocidad; la emergencia/boost puede superar 100).
+const VENTILADORES = [
+  { clave: 'v1_pct', nombre: 'Ventilador de inyección', icono: '➡️' },
+  { clave: 'v2_pct', nombre: 'Ventilador de extracción', icono: '⬆️' },
+  { clave: 'v3_pct', nombre: 'Ventilador de emergencia', icono: '🌀' },
+];
 
-  if (!lectura) {
-    return <div className="estado-ventiladores"><p>⏳ Cargando...</p></div>;
-  }
-
-  const ventiladores = [
-    {
-      nombre: 'Ventilador Extracción',
-      estado: lectura.ventilador_extraccion,
-      icono: '⬆️',
-    },
-    {
-      nombre: 'Ventilador Inyección 1',
-      estado: lectura.ventilador_inyeccion_1,
-      icono: '➡️',
-    },
-    {
-      nombre: 'Ventilador Inyección 2',
-      estado: lectura.ventilador_inyeccion_2,
-      icono: '➡️',
-    },
-  ];
-
+const EstadoVentiladores = ({ lectura }) => {
+  if (!lectura) return <div className="estado-ventiladores"><h3>Actuadores</h3><p>Sin lecturas.</p></div>;
   return (
     <div className="estado-ventiladores">
-      <h3>Estado de Ventiladores</h3>
+      <h3>Actuadores</h3>
       <div className="ventiladores-grid">
-        {ventiladores.map((ventilador, index) => (
-          <div
-            key={index}
-            className={`ventilador-card ${ventilador.estado ? 'activo' : 'inactivo'}`}
-          >
-            <div className="ventilador-icono">{ventilador.icono}</div>
-            <div className="ventilador-nombre">{ventilador.nombre}</div>
-            <div className="ventilador-estado">
-              <span className={`estado-badge ${ventilador.estado ? 'encendido' : 'apagado'}`}>
-                {ventilador.estado ? 'ENCENDIDO' : 'APAGADO'}
-              </span>
+        {VENTILADORES.map(({ clave, nombre, icono }) => {
+          const pct = Number(lectura[clave]) || 0;
+          return (
+            <div key={clave} className={`ventilador-card ${pct > 0 ? 'activo' : 'inactivo'}`}>
+              <div className="ventilador-icono">{icono}</div>
+              <div className="ventilador-nombre">{nombre}</div>
+              <div className="ventilador-estado">
+                <span className={`estado-badge ${pct > 0 ? 'encendido' : 'apagado'}`}>{pct > 0 ? `${pct} %` : 'APAGADO'}</span>
+              </div>
+              <div className={`ventilador-indicador ${pct > 0 ? 'activo' : ''}`} />
             </div>
-            <div className={`ventilador-indicador ${ventilador.estado ? 'activo' : ''}`} />
-          </div>
-        ))}
+          );
+        })}
+        <div className={`ventilador-card ${lectura.valvula ? 'activo' : 'inactivo'}`}>
+          <div className="ventilador-icono">🚰</div>
+          <div className="ventilador-nombre">Válvula de gas</div>
+          <div className="ventilador-estado"><span className={`estado-badge ${lectura.valvula ? 'encendido' : 'apagado'}`}>{lectura.valvula ? 'CERRADA' : 'ABIERTA'}</span></div>
+        </div>
+        <div className={`ventilador-card ${lectura.aspersor ? 'activo' : 'inactivo'}`}>
+          <div className="ventilador-icono">💧</div>
+          <div className="ventilador-nombre">Aspersor</div>
+          <div className="ventilador-estado"><span className={`estado-badge ${lectura.aspersor ? 'encendido' : 'apagado'}`}>{lectura.aspersor ? 'ACTIVO' : 'INACTIVO'}</span></div>
+        </div>
       </div>
     </div>
   );

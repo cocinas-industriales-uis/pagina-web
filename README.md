@@ -1,182 +1,37 @@
-# Frontend - Sistema de Monitoreo IoT Cocina
+# Web — Monitoreo de cocinas industriales UIS
 
-Frontend moderno con React + Vite para el sistema de monitoreo de cocina industrial.
+React 19 + Vite. Consume la API del backend (`servidor/`): **todo requiere iniciar sesión**.
 
-## 📋 Descripción
-
-Interfaz web responsiva para visualizar en tiempo real:
-- 📊 Lecturas actuales de sensores
-- 📈 Gráficas de historial
-- 🚨 Alertas del sistema
-- 🌡️ Estado de ventiladores
-- 📋 Historial completo de lecturas
-
-## 🎯 Características
-
-### Páginas
-1. **Dashboard** - Vista principal con estado actual y gráficas
-2. **Alertas** - Historial de todas las alertas generadas
-3. **Historial** - Detalles completos de todas las lecturas
-
-### Componentes
-- `LecturaActual` - Mostrar última lectura con sensores
-- `EstadoVentiladores` - Estado de los 3 ventiladores
-- `Alertas` - Indicador visual de alertas
-- `Graficas` - Gráficas de temperatura y gas
-- `HistorialLecturas` - Tabla con historial
-- `Navbar` - Navegación entre páginas
-
-## 🚀 Instalación
-
-### Requisitos
-- Node.js 16+
-- npm o yarn
-
-### Pasos
-
-1. **Instalar dependencias**
+## Uso
 ```bash
-cd cocina-frontend
 npm install
-```
-
-2. **Configurar URL del API** (en `src/services/api.js`)
-```javascript
-const API_BASE_URL = 'http://localhost:8000/api';
-```
-
-3. **Ejecutar servidor de desarrollo**
-```bash
-npm run dev
-```
-
-El frontend estará en: `http://localhost:5173/`
-
-## 🔧 Configuración
-
-### Variables de Entorno (si las necesitas)
-Crear archivo `.env` en la raíz del proyecto:
-```
-VITE_API_URL=http://localhost:8000/api
-```
-
-### Proxy de Desarrollo
-El archivo `vite.config.js` incluye proxy automático para `/api`:
-```javascript
-server: {
-  proxy: {
-    '/api': {
-      target: 'http://localhost:8000',
-      changeOrigin: true,
-    },
-  },
-},
-```
-
-## 🛠️ Comandos
-
-```bash
-# Desarrollo
-npm run dev
-
-# Build para producción
-npm run build
-
-# Preview de la build
-npm run preview
-
-# Linting
+npm run dev          # http://localhost:5173 ; /api se reenvía a http://localhost:8000 (vite.config.js)
+npm test             # pruebas de lógica pura (node --test, sin dependencias extra)
 npm run lint
+npm run build        # para producción defina antes VITE_API_URL (ver .env.example)
 ```
+Requisitos: backend en marcha (`python manage.py runserver`), un usuario de Django y, para reconocer alarmas,
+su código personal (`python manage.py fijar_codigo_reconocimiento <usuario>`).
 
-## 📡 API Disponible (desde `src/services/api.js`)
+## Páginas
+| Ruta | Contenido |
+|---|---|
+| `/login` | Usuario y contraseña (`POST /api/auth/login/`). Token en `localStorage`; si vence o el servidor responde 401 se vuelve al login |
+| `/` Monitoreo | Estado real de la cocina elegida, alarmas activas con **Reconocer**, última lectura, actuadores (ventiladores, válvula, aspersor) y gráficas de las últimas 60 lecturas |
+| `/historial` | Lecturas con paginación del servidor y filtro por cocina |
+| `/alertas` | Alarmas P0–P5 activas y reconocidas; reconocer pide el código personal. **Reconocer no envía órdenes al ESP32** |
 
-```javascript
-// Obtener última lectura
-obtenerUltimaLectura()
+## Datos en vivo
+`src/services/EnVivo.jsx` carga el estado inicial por REST y escucha `GET /api/stream/` (SSE con `fetch`, porque
+`EventSource` no permite la cabecera `Authorization`). Si el stream cae, reconecta con espera creciente, consulta cada 5 s
+y muestra «Reconectando…». Si una cocina lleva más de 30 s sin lecturas nuevas, la web avisa que el dato **no es actual**.
 
-// Obtener todas las lecturas
-obtenerLecturas(limit)
+## Qué se corrigió respecto de la versión anterior (Fase 4 de la auditoría)
+Sin login (la API ahora lo exige); campos antiguos (`nivel_gas` en «ppm», `presion` en «hPa», `ventilador_*`) por los del firmware
+(`gas_pct`, `presion_pct`, `v1_pct`…, `valvula`, `aspersor`); estados antiguos que caían en «Sistema Normal» cuando no los
+reconocían; texto fijo «Sistema Normal» / «parámetros dentro de los rangos»; botón «Emergencia» sin acción; gráficas que
+mostraban las 20 lecturas MÁS ANTIGUAS; mezcla de cocinas; URL de la API fija en el código; `POST /lecturas/` (ya no existe).
+Ver `investigacion/docs/auditoria/SEGUIMIENTO_AUDITORIA.md`, sección 18.
 
-// Obtener solo alertas
-obtenerAlertas()
-
-// Obtener resumen del sistema
-obtenerResumen()
-
-// Crear nueva lectura (para ESP32)
-crearLectura(datos)
-
-// Obtener alertas filtradas por tipo
-obtenerAlertusPorTipo(tipo)
-
-// Obtener lecturas filtradas por estado
-obtenerLecturasPorEstado(estado)
-```
-
-## 🎨 Estilos
-
-Los estilos CSS están organizados por componente:
-- `App.css` - Estilos globales
-- `Dashboard.css` - Estilos del dashboard
-- `LecturaActual.css` - Lecturas actuales
-- `Alertas.css` - Alertas
-- Y más en `styles/`
-
-## 📦 Tecnologías
-
-- **React 19** - UI framework
-- **Vite** - Build tool
-- **Axios** - HTTP client
-- **React Router** - Routing
-- **Recharts** - Gráficas
-- **ESLint** - Linting
-
-## 🚨 Notas Importantes
-
-1. El frontend por defecto intenta conectar a `http://localhost:8000/api`
-2. Si el backend no está disponible, usa datos de prueba automáticamente
-3. Se actualiza cada 5 segundos
-4. CORS debe estar habilitado en el backend
-
-## 📝 Estructura de Proyecto
-
-```
-cocina-frontend/
-├── src/
-│   ├── components/     # Componentes reutilizables
-│   ├── pages/          # Páginas principales
-│   ├── services/       # Servicios (API, etc)
-│   ├── styles/         # Estilos CSS
-│   ├── App.jsx         # Componente principal
-│   ├── main.jsx        # Entry point
-│   └── index.css       # Estilos globales
-├── public/             # Recursos estáticos
-├── vite.config.js      # Configuración Vite
-├── eslint.config.js    # Configuración ESLint
-└── package.json        # Dependencias
-
-```
-
-## 🔗 Conexión con Backend
-
-El frontend se conecta al backend a través de:
-- **Desarrollo**: `http://localhost:8000/api` (con proxy Vite)
-- **Producción**: Ajustar en `src/services/api.js`
-
-### Flujo de Datos
-
-```
-ESP32 → Backend API → Frontend
-                   ↓
-              React State
-                   ↓
-              Componentes
-                   ↓
-              Usuario
-```
-
-## 📄 Licencia
-
-Proyecto para Universidad Industrial de Santander
-
+## Pruebas
+`src/test/*.test.js`: severidad, datos obsoletos, alarmas, orden de gráficas, analizador SSE y reconexión del stream.
